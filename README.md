@@ -1,77 +1,143 @@
-# Hilfer
+<p align="center">
+  <img src="assets/hilfer.png" alt="Hilfer logo" width="180">
+</p>
 
-Railway-compatible Python cron worker for refreshing market data in a Google Sheets investment ledger.
+<h1 align="center">Hilfer</h1>
 
-Hilfer reads tickers from a Hapi-based US stock/ETF portfolio ledger, fetches current quote data from Finnhub, and replaces the `Market_Data` worksheet with a clean machine-readable table for downstream analysis.
+<p align="center">
+  A run-once Python cron worker that refreshes Google Sheets market data for a personal US stock/ETF portfolio ledger.
+</p>
+
+<p align="center">
+  <a href="https://www.python.org/downloads/"><img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-blue"></a>
+  <img alt="Tests" src="https://img.shields.io/badge/tests-pytest-green">
+  <img alt="License" src="https://img.shields.io/badge/license-MIT-black">
+</p>
+
+## Overview
+
+Hilfer is the market-data ingestion layer for a Hapi-based investment control system. It treats Google Sheets as the ledger, Finnhub as the quote provider, and scheduled infrastructure such as Railway Cron as the automation layer.
+
+The current MVP has one job:
+
+1. Read unique tickers from the operations ledger.
+2. Fetch current US stock/ETF quote data from Finnhub.
+3. Replace the `Market_Data` worksheet with a fresh table.
+4. Exit.
 
 > [!IMPORTANT]
-> Hilfer is intentionally narrow. It reads from `Operaciones`, writes only to `Market_Data`, preserves the worksheet itself, and exits after one run.
+> Hilfer is intentionally conservative. It writes only to `Market_Data`, preserves the worksheet itself, and never mutates the rest of the investment workbook.
+
+## Why This Exists
+
+Personal investment tracking often ends up split across brokerage exports, hand-maintained spreadsheets, and ad hoc analysis. Hilfer keeps the system simple and auditable:
+
+- Google Sheets remains the source of truth for transactions and portfolio structure.
+- The worker refreshes market data without touching thesis, dashboard, or portfolio formulas.
+- ChatGPT Project sources or other analysis tools can consume the updated workbook without needing API credentials.
+
+This repository is small on purpose: it is easier to review, deploy, and trust.
 
 ## Features
 
-- Reads unique tickers from the `Operaciones` worksheet
-- Detects the `Ticker` header even when the sheet has title or description rows above it
-- Normalizes tickers by trimming whitespace and uppercasing
-- Fetches US stock/ETF quote data from Finnhub
-- Writes one `Market_Data` row per ticker with `OK` or `ERROR` status
-- Builds the replacement table in memory before clearing `Market_Data`
-- Uses Google service account authentication
-- Runs once and exits for Railway cron jobs
+- Run-once cron worker designed for Railway.
+- Google service account authentication.
+- Batch-style read/write flow through `gspread`.
+- Finnhub quote integration using `X-Finnhub-Token`.
+- Per-ticker `OK` / `ERROR` rows.
+- Invalid quote handling for missing, null, non-numeric, or non-positive prices.
+- API keys and Google credentials kept out of logs and Git.
+- English and Spanish/spanglish ledger compatibility for the source operations sheet.
+- Focused pytest coverage for parsing, config, spreadsheet contracts, and error rows.
 
-## How It Works
+## Data Flow
 
 ```text
-Google Sheets Operaciones
+Google Sheets operations ledger
         |
         v
-Read + normalize unique tickers
+Read ticker column + normalize symbols
         |
         v
-Finnhub /quote API
+Finnhub /quote
         |
         v
-Replace Google Sheets Market_Data
+Build replacement Market_Data table in memory
+        |
+        v
+Clear + update Market_Data
 ```
-
-The worker is safe by design: it never updates cells one by one across the ledger, and it never deletes or recreates worksheets.
 
 ## Spreadsheet Contract
 
-Hilfer reads from the worksheet named `Operaciones`. That sheet must contain a column named exactly:
+Hilfer reads tickers from the first matching source worksheet:
+
+| Language style | Worksheet name |
+| --- | --- |
+| Spanish/spanglish | `Operaciones` |
+| English | `Operations` |
+
+The source worksheet must contain one of these ticker columns:
+
+| Preferred | Also supported |
+| --- | --- |
+| `Ticker` | `Symbol` |
+
+The header row may appear below title or description rows.
+
+Hilfer writes only to:
 
 ```text
-Ticker
+Market_Data
 ```
 
-The header may appear below introductory title or description rows.
-
-Hilfer replaces the contents of `Market_Data` with this exact header order:
+`Market_Data` is replaced with this exact header order:
 
 ```text
 Ticker, Price, Currency, Change_Day, Change_Day_Pct, Previous_Close, Market_Time, Updated_At_UTC, Source, Status, Error
 ```
 
-Rows with a valid Finnhub quote are written with `Status=OK`. Failed or invalid ticker lookups are still written as rows with `Status=ERROR` and an error message.
+Rows with valid quote data are written with `Status=OK`. Failed or invalid tickers are still written with `Status=ERROR` and a concise error message.
 
-Hilfer must not mutate these worksheets:
+Hilfer must not mutate:
 
 - `Operaciones`
+- `Operations`
 - `Movimientos_Dinero`
+- `Money_Movements`
 - `Tesis`
+- `Theses`
 - `Portafolio`
+- `Portfolio`
 - `Dashboard`
 - `Snapshots`
 - `Config`
 - `Developer_Contract`
 
+## Market Data Mapping
+
+| `Market_Data` column | Source |
+| --- | --- |
+| `Ticker` | Normalized ticker from the ledger |
+| `Price` | Finnhub `c` |
+| `Currency` | `USD` for v1 |
+| `Change_Day` | Finnhub `d` |
+| `Change_Day_Pct` | Finnhub `dp` |
+| `Previous_Close` | Finnhub `pc` |
+| `Market_Time` | Finnhub `t`, converted to UTC ISO timestamp |
+| `Updated_At_UTC` | Worker execution timestamp |
+| `Source` | `Finnhub` |
+| `Status` | `OK` or `ERROR` |
+| `Error` | Empty on success; concise message on failure |
+
 ## Requirements
 
 - Python 3.11+
-- A Google Cloud service account with access to the target spreadsheet
-- A Finnhub API key
-- A Google Sheet with the expected worksheet names
+- Google Cloud service account with access to the target spreadsheet
+- Finnhub API key
+- Google Sheet matching the spreadsheet contract above
 
-## Local Setup
+## Local Development
 
 Create and activate a virtual environment:
 
@@ -80,19 +146,19 @@ python -m venv .venv
 .venv\Scripts\Activate.ps1
 ```
 
-Install Hilfer with development dependencies:
+Install the package with development dependencies:
 
 ```powershell
 python -m pip install -e ".[dev]"
 ```
 
-Create a local `.env` file:
+Create a local `.env`:
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-Put your Google service account credentials at `./service_account.json`, then edit `.env`:
+Place your Google service account file at `./service_account.json`, then configure:
 
 ```env
 FINNHUB_API_KEY=replace-with-your-finnhub-api-key
@@ -101,9 +167,9 @@ GOOGLE_SERVICE_ACCOUNT_PATH=./service_account.json
 HTTP_TIMEOUT_SECONDS=10
 ```
 
-Share the Google Sheet with the `client_email` from `service_account.json`.
+Share the target Google Sheet with the `client_email` from `service_account.json`.
 
-Run the worker once:
+Run the worker:
 
 ```powershell
 python -m hilfer.main
@@ -119,7 +185,7 @@ hilfer
 
 Create a Railway service from this repository and configure it as a cron job.
 
-Set these Railway environment variables:
+Set the following environment variables:
 
 ```text
 FINNHUB_API_KEY=...
@@ -128,46 +194,28 @@ GOOGLE_SERVICE_ACCOUNT_JSON=...
 HTTP_TIMEOUT_SECONDS=10
 ```
 
-For Railway, `GOOGLE_SERVICE_ACCOUNT_JSON` should contain the full service account JSON as a single environment variable value. Do not use `GOOGLE_SERVICE_ACCOUNT_PATH` unless you are also provisioning a credentials file in the runtime.
-
 Use this start command:
 
 ```bash
 python -m hilfer.main
 ```
 
-The process logs progress, writes `Market_Data`, and exits.
+For Railway, prefer `GOOGLE_SERVICE_ACCOUNT_JSON` as a single environment variable containing the full service account JSON. `GOOGLE_SERVICE_ACCOUNT_PATH` is intended for local development unless you explicitly provision a credentials file in the runtime.
 
-## Environment Variables
+## Configuration
 
 | Variable | Required | Description |
 | --- | --- | --- |
-| `FINNHUB_API_KEY` | Yes | Finnhub API key. Sent via `X-Finnhub-Token` header. |
+| `FINNHUB_API_KEY` | Yes | Finnhub API key. Sent via `X-Finnhub-Token`. |
 | `GOOGLE_SHEET_ID` | Yes | Target Google spreadsheet ID. |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | Either this or path | Full Google service account JSON string. Best for Railway. |
-| `GOOGLE_SERVICE_ACCOUNT_PATH` | Either this or JSON | Path to a local service account JSON file. Best for local development. |
-| `HTTP_TIMEOUT_SECONDS` | No | HTTP timeout for Finnhub calls. Defaults to `10`. |
+| `GOOGLE_SERVICE_ACCOUNT_PATH` | Either this or JSON | Local path to a service account JSON file. Best for development. |
+| `HTTP_TIMEOUT_SECONDS` | No | HTTP timeout for Finnhub requests. Defaults to `10`. |
 
 > [!CAUTION]
-> Never commit `.env`, `service_account.json`, exported ledgers, API keys, or Google credentials. The default `.gitignore` excludes the local credential files and `data/`.
+> Do not commit `.env`, `service_account.json`, exported ledgers, API keys, or Google credentials. The default `.gitignore` excludes the local credential files and `data/`.
 
-## Market Data Mapping
-
-Hilfer maps Finnhub quote fields into `Market_Data` as follows:
-
-| Market_Data column | Finnhub field |
-| --- | --- |
-| `Price` | `c` |
-| `Change_Day` | `d` |
-| `Change_Day_Pct` | `dp` |
-| `Previous_Close` | `pc` |
-| `Market_Time` | `t` converted to UTC ISO timestamp |
-| `Currency` | `USD` for v1 |
-| `Source` | `Finnhub` |
-
-A quote payload is treated as invalid when `c` is missing, null, non-numeric, or less than or equal to zero.
-
-## Development
+## Development Workflow
 
 Run tests:
 
@@ -179,7 +227,8 @@ The test suite covers:
 
 - Ticker normalization and deduplication
 - Header detection below title rows
-- Missing `Ticker` header errors
+- English and Spanish/spanglish spreadsheet aliases
+- Missing ticker header errors
 - Service account configuration loading
 - Finnhub quote parsing
 - Invalid quote handling
@@ -192,7 +241,7 @@ The test suite covers:
 src/hilfer/
   config.py         Environment and credential loading
   google_sheets.py  Google Sheets read/write contract
-  market_data.py    Finnhub quote client and parsing
+  market_data.py    Finnhub quote client and quote parsing
   models.py         Shared row models and headers
   main.py           Run-once cron worker entrypoint
 tests/
@@ -200,3 +249,11 @@ tests/
   test_google_sheets.py
   test_market_data.py
 ```
+
+## Security Notes
+
+- Finnhub credentials are sent in an HTTP header, not in query strings.
+- HTTP errors are sanitized so API keys are not written to logs.
+- The worker builds the full replacement table before clearing `Market_Data`.
+- The worker does not delete or recreate worksheets.
+- Configuration supports local file-based credentials and Railway-friendly JSON-string credentials.

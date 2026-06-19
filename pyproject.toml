@@ -8,6 +8,7 @@ version = "0.1.0"
 description = "Railway cron worker for refreshing Google Sheets market data from Finnhub."
 readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
 dependencies = [
   "gspread>=6.2.1",
   "python-dotenv>=1.0.1",
@@ -28,4 +29,3 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-
