@@ -74,7 +74,7 @@ Hilfer reads tickers from the first matching source worksheet:
 
 | Language style | Worksheet name |
 | --- | --- |
-| Spanish/spanglish | `Operaciones` |
+| Spanish | `Operaciones` |
 | English | `Operations` |
 
 The source worksheet must contain one of these ticker columns:
