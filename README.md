@@ -197,7 +197,7 @@ HTTP_TIMEOUT_SECONDS=10
 Use this start command:
 
 ```bash
-python -m hilfer.main
+PYTHONPATH=src python -m hilfer.main
 ```
 
 The repository also includes `railpack.json`, which sets the same command through Railpack's `deploy.startCommand` field so Railway can build the worker without framework auto-detection.

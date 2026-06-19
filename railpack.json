@@ -2,6 +2,6 @@
   "$schema": "https://schema.railpack.com",
   "provider": "python",
   "deploy": {
-    "startCommand": "python -m hilfer.main"
+    "startCommand": "PYTHONPATH=src python -m hilfer.main"
   }
 }
