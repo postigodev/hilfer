@@ -200,6 +200,8 @@ Use this start command:
 python -m hilfer.main
 ```
 
+The repository also includes `railpack.json`, which sets the same command through Railpack's `deploy.startCommand` field so Railway can build the worker without framework auto-detection.
+
 For Railway, prefer `GOOGLE_SERVICE_ACCOUNT_JSON` as a single environment variable containing the full service account JSON. `GOOGLE_SERVICE_ACCOUNT_PATH` is intended for local development unless you explicitly provision a credentials file in the runtime.
 
 ## Configuration
