@@ -152,6 +152,8 @@ Install the package with development dependencies:
 python -m pip install -e ".[dev]"
 ```
 
+Railway installs runtime dependencies from `requirements.txt`; local development uses the editable package install above so tests can import the `src/` package directly.
+
 Create a local `.env`:
 
 ```powershell
