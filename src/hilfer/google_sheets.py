@@ -4,7 +4,7 @@ from typing import Any
 
 import gspread
 
-from hilfer.models import MARKET_DATA_HEADERS, MarketDataRow
+from hilfer.models import MARKET_DATA_CONTRACT_NOTE, MARKET_DATA_HEADERS, MARKET_DATA_TITLE, MarketDataRow
 
 SOURCE_SHEET_NAMES = ("Operaciones", "Operations")
 MARKET_DATA_SHEET = "Market_Data"
@@ -56,11 +56,16 @@ class GoogleSheetsClient:
         return normalize_tickers_from_rows(rows)
 
     def replace_market_data(self, rows: list[MarketDataRow]) -> None:
-        table: list[list[str | float]] = [MARKET_DATA_HEADERS]
+        table: list[list[str | float]] = [
+            [MARKET_DATA_TITLE, *[""] * (len(MARKET_DATA_HEADERS) - 1)],
+            [MARKET_DATA_CONTRACT_NOTE, *[""] * (len(MARKET_DATA_HEADERS) - 1)],
+            MARKET_DATA_HEADERS,
+        ]
         table.extend(row.to_sheet_row() for row in rows)
 
         worksheet = self._spreadsheet.worksheet(MARKET_DATA_SHEET)
-        worksheet.clear()
+        row_count = getattr(worksheet, "row_count", 1000)
+        worksheet.batch_clear([f"A1:M{max(len(table), row_count)}"])
         worksheet.update(values=table, range_name="A1")
 
     def _worksheet_by_alias(self, names: tuple[str, ...]) -> gspread.Worksheet:

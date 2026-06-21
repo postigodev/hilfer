@@ -22,7 +22,7 @@ The current MVP has one job:
 
 1. Read unique tickers from the operations ledger.
 2. Fetch current US stock/ETF quote data from Finnhub.
-3. Replace the `Market_Data` worksheet with a fresh table.
+3. Replace the generated `Market_Data` value range with a fresh table.
 4. Exit.
 
 > [!IMPORTANT]
@@ -48,7 +48,7 @@ This repository is small on purpose: it is easier to review, deploy, and trust.
 - Invalid quote handling for missing, null, non-numeric, or non-positive prices.
 - API keys and Google credentials kept out of logs and Git.
 - English and Spanish/spanglish ledger compatibility for the source operations sheet.
-- Focused pytest coverage for parsing, config, spreadsheet contracts, and error rows.
+- Focused pytest coverage for parsing, config, spreadsheet contracts, bounded writes, and error rows.
 
 ## Data Flow
 
@@ -62,10 +62,10 @@ Read ticker column + normalize symbols
 Finnhub /quote
         |
         v
-Build replacement Market_Data table in memory
+Build replacement Market_Data value table in memory
         |
         v
-Clear + update Market_Data
+Clear + update bounded Market_Data output range
 ```
 
 ## Spreadsheet Contract
@@ -85,19 +85,21 @@ The source worksheet must contain one of these ticker columns:
 
 The header row may appear below title or description rows.
 
-Hilfer writes only to:
+Hilfer writes values only to:
 
 ```text
 Market_Data
 ```
 
-`Market_Data` is replaced with this exact header order:
+`Market_Data` keeps this sheet-level layout:
 
 ```text
-Ticker, Price, Currency, Change_Day, Change_Day_Pct, Previous_Close, Market_Time, Updated_At_UTC, Source, Status, Error
+Row 1: Market_Data
+Row 2: Contrato para el script Railway. El script debe sobrescribir/actualizar esta hoja en batch; no debe tocar Portafolio.
+Row 3: Ticker, Nombre, Precio USD, Moneda, Cambio % día, Prev Close, Market Time, Updated At, Fuente, Status, Error, Provider Symbol, Run ID
 ```
 
-Rows with valid quote data are written with `Status=OK`. Failed or invalid tickers are still written with `Status=ERROR` and a concise error message.
+Rows with valid quote data are written from row 4 onward with `Status=OK`. Failed or invalid tickers are still written with `Status=ERROR` and a concise error message. Static/manual rows such as `CASH` are not preserved; `Market_Data` is generated only from tickers read from the operations ledger.
 
 Hilfer must not mutate:
 
@@ -119,16 +121,18 @@ Hilfer must not mutate:
 | `Market_Data` column | Source |
 | --- | --- |
 | `Ticker` | Normalized ticker from the ledger |
-| `Price` | Finnhub `c` |
-| `Currency` | `USD` for v1 |
-| `Change_Day` | Finnhub `d` |
-| `Change_Day_Pct` | Finnhub `dp` |
-| `Previous_Close` | Finnhub `pc` |
-| `Market_Time` | Finnhub `t`, converted to UTC ISO timestamp |
-| `Updated_At_UTC` | Worker execution timestamp |
-| `Source` | `Finnhub` |
+| `Nombre` | Blank for v1 |
+| `Precio USD` | Finnhub `c` |
+| `Moneda` | `USD` for v1 |
+| `Cambio % día` | Finnhub `dp` |
+| `Prev Close` | Finnhub `pc` |
+| `Market Time` | Finnhub `t`, converted to UTC ISO timestamp |
+| `Updated At` | Worker execution timestamp |
+| `Fuente` | `Finnhub` |
 | `Status` | `OK` or `ERROR` |
 | `Error` | Empty on success; concise message on failure |
+| `Provider Symbol` | Ticker sent to Finnhub |
+| `Run ID` | Shared run identifier for one execution |
 
 ## Requirements
 
@@ -232,6 +236,7 @@ The test suite covers:
 - Ticker normalization and deduplication
 - Header detection below title rows
 - English and Spanish/spanglish spreadsheet aliases
+- `Market_Data` title, note, row-3 headers, and bounded `A:M` writes
 - Missing ticker header errors
 - Service account configuration loading
 - Finnhub quote parsing
@@ -258,6 +263,7 @@ tests/
 
 - Finnhub credentials are sent in an HTTP header, not in query strings.
 - HTTP errors are sanitized so API keys are not written to logs.
-- The worker builds the full replacement table before clearing `Market_Data`.
+- The worker builds the full replacement table before clearing `Market_Data` values.
+- The worker clears only the bounded `A:M` output range, not the whole worksheet.
 - The worker does not delete or recreate worksheets.
 - Configuration supports local file-based credentials and Railway-friendly JSON-string credentials.

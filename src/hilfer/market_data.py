@@ -20,14 +20,14 @@ def utc_now_iso() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def parse_finnhub_quote(ticker: str, payload: dict[str, Any], updated_at_utc: str) -> MarketDataRow:
+def parse_finnhub_quote(ticker: str, payload: dict[str, Any], updated_at_utc: str, run_id: str) -> MarketDataRow:
     price = _required_positive_number(payload.get("c"), field_name="c")
 
     return MarketDataRow(
         ticker=ticker,
+        name="",
         price=price,
         currency=DEFAULT_CURRENCY,
-        change_day=_optional_number(payload.get("d")),
         change_day_pct=_optional_number(payload.get("dp")),
         previous_close=_optional_number(payload.get("pc")),
         market_time=_market_time_iso(payload.get("t")),
@@ -35,15 +35,17 @@ def parse_finnhub_quote(ticker: str, payload: dict[str, Any], updated_at_utc: st
         source=SOURCE,
         status="OK",
         error="",
+        provider_symbol=ticker,
+        run_id=run_id,
     )
 
 
-def error_row(ticker: str, error: str, updated_at_utc: str) -> MarketDataRow:
+def error_row(ticker: str, error: str, updated_at_utc: str, run_id: str) -> MarketDataRow:
     return MarketDataRow(
         ticker=ticker,
+        name="",
         price="",
         currency=DEFAULT_CURRENCY,
-        change_day="",
         change_day_pct="",
         previous_close="",
         market_time="",
@@ -51,6 +53,8 @@ def error_row(ticker: str, error: str, updated_at_utc: str) -> MarketDataRow:
         source=SOURCE,
         status="ERROR",
         error=error,
+        provider_symbol=ticker,
+        run_id=run_id,
     )
 
 
@@ -60,12 +64,12 @@ class FinnhubClient:
         self._timeout_seconds = timeout_seconds
         self._session = requests.Session()
 
-    def fetch_row(self, ticker: str, updated_at_utc: str) -> MarketDataRow:
+    def fetch_row(self, ticker: str, updated_at_utc: str, run_id: str) -> MarketDataRow:
         try:
             payload = self._fetch_payload(ticker)
-            return parse_finnhub_quote(ticker=ticker, payload=payload, updated_at_utc=updated_at_utc)
+            return parse_finnhub_quote(ticker=ticker, payload=payload, updated_at_utc=updated_at_utc, run_id=run_id)
         except Exception as exc:
-            return error_row(ticker=ticker, error=str(exc), updated_at_utc=updated_at_utc)
+            return error_row(ticker=ticker, error=str(exc), updated_at_utc=updated_at_utc, run_id=run_id)
 
     def _fetch_payload(self, ticker: str) -> dict[str, Any]:
         try:

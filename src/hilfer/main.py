@@ -8,6 +8,10 @@ from hilfer.google_sheets import GoogleSheetsClient
 from hilfer.market_data import FinnhubClient, utc_now_iso
 
 
+def run_id_from_updated_at(updated_at_utc: str) -> str:
+    return f"run-{updated_at_utc.replace('-', '').replace(':', '')}"
+
+
 def configure_logging() -> None:
     logging.basicConfig(
         level=logging.INFO,
@@ -43,11 +47,12 @@ def run() -> int:
     logger.info("Read %s unique ticker(s) from Operaciones.", len(tickers))
 
     updated_at_utc = utc_now_iso()
+    run_id = run_id_from_updated_at(updated_at_utc)
     market_data = FinnhubClient(
         api_key=settings.finnhub_api_key,
         timeout_seconds=settings.http_timeout_seconds,
     )
-    rows = [market_data.fetch_row(ticker, updated_at_utc=updated_at_utc) for ticker in tickers]
+    rows = [market_data.fetch_row(ticker, updated_at_utc=updated_at_utc, run_id=run_id) for ticker in tickers]
 
     for row in rows:
         if row.status == "ERROR":
@@ -72,4 +77,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
